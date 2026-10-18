@@ -1,0 +1,9 @@
+# 素材台依赖（本机已装好，一般不用再跑）
+# 安装：python -m pip install -r requirements.txt
+
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.9
+
+# 可选：找不到系统 ffmpeg 时用它自带的便携版兜底
+imageio-ffmpeg>=0.5
