@@ -1,9 +1,10 @@
 /** 分片上传队列。 */
 
 import { api } from './api.js';
+import { confirmUploadDialog } from './dialogs.js';
 import { state } from './state.js';
 import { toast, toastError } from './toast.js';
-import { escapeHtml, fmtBytes, icon } from './util.js';
+import { escapeHtml, fmtBytes, icon, isVideoName } from './util.js';
 
 const dock = document.getElementById('uploader');
 const listEl = document.getElementById('uploadList');
@@ -49,49 +50,61 @@ export function targetFolderName() {
   return walk(state.folders) || '素材库';
 }
 
-export function enqueueFiles(fileList, folderId) {
-  const files = Array.from(fileList || []);
-  if (!files.length) return;
-  const target = folderId || resolveTargetFolder();
-  if (!target) {
-    toast('先在左侧建一个分类', { type: 'error' });
-    return;
-  }
-  lastFolderId = target;
+export async function enqueueFiles(fileList, folderId) {
+  const incoming = Array.from(fileList || []);
+  if (!incoming.length) return;
 
-  let skipped = 0;
-  files.forEach((file) => {
-    if (!file.size) {
-      skipped += 1;
+  const files = incoming.filter((file) => file.size > 0);
+  const skipped = incoming.length - files.length;
+  if (skipped) toast(`${skipped} 个空文件已跳过`, { type: 'error' });
+  if (!files.length) return;
+
+  try {
+    let target = folderId || resolveTargetFolder();
+    if (!target) {
+      toast('先在左侧建一个分类', { type: 'error' });
       return;
     }
-    seq += 1;
-    queue.push({
-      key: seq,
-      file,
-      name: file.name,
-      size: file.size,
-      folderId: target,
-      status: 'queued',
-      sent: 0,
-      uploadId: null,
-      chunkSize: 8 * 1024 * 1024,
-      received: new Set(),
-      error: '',
-      paused: false,
-      cancelled: false,
-      startedAt: 0,
-      speed: 0,
+
+    /* 视频入库前先确认分类和名字 */
+    let names = null;
+    if (files.some((file) => isVideoName(file.name))) {
+      const confirmed = await confirmUploadDialog(files, target);
+      if (!confirmed) return;
+      target = confirmed.folderId;
+      names = confirmed.names;
+    }
+
+    lastFolderId = target;
+
+    files.forEach((file, index) => {
+      seq += 1;
+      queue.push({
+        key: seq,
+        file,
+        name: names ? names[index] : file.name,
+        size: file.size,
+        folderId: target,
+        status: 'queued',
+        sent: 0,
+        uploadId: null,
+        chunkSize: 8 * 1024 * 1024,
+        received: new Set(),
+        error: '',
+        paused: false,
+        cancelled: false,
+        startedAt: 0,
+        speed: 0,
+      });
     });
-  });
 
-  if (skipped) toast(`${skipped} 个空文件已跳过`, { type: 'error' });
-  if (!queue.length) return;
-
-  dock.hidden = false;
-  dock.classList.remove('is-collapsed');
-  render();
-  pump();
+    dock.hidden = false;
+    dock.classList.remove('is-collapsed');
+    render();
+    pump();
+  } catch (error) {
+    toastError(error);
+  }
 }
 
 function pump() {

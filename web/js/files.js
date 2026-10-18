@@ -363,7 +363,10 @@ function bindInteractions() {
     if (index >= 0) actions.openPreview(index);
   });
 
-  scroller.addEventListener('contextmenu', (event) => {
+  document.addEventListener('contextmenu', (event) => {
+    /* 只接管素材区，侧栏、顶栏、弹层保留自己的行为 */
+    if (!event.target.closest('.content') || event.target.closest('.content__head')) return;
+
     const card = event.target.closest('[data-id]');
     const tile = event.target.closest('[data-open-folder]');
     event.preventDefault();
@@ -401,7 +404,48 @@ function bindInteractions() {
   board.addEventListener('dragend', (event) => {
     const node = event.target.closest('[data-id]');
     if (node) node.classList.remove('is-dragging');
+    board.querySelectorAll('.folder-tile.is-drop').forEach((tile) => tile.classList.remove('is-drop'));
     document.body.classList.remove('is-dragging-files');
+  });
+
+  /* 素材拖到文件夹方块上 = 移进这个分类 */
+  board.addEventListener('dragover', (event) => {
+    const tile = event.target.closest('[data-open-folder]');
+    if (!tile) return;
+    const types = Array.from(event.dataTransfer.types || []);
+    if (!types.includes('application/x-material-ids')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    tile.classList.add('is-drop');
+  });
+
+  board.addEventListener('dragleave', (event) => {
+    const tile = event.target.closest('[data-open-folder]');
+    if (tile) tile.classList.remove('is-drop');
+  });
+
+  board.addEventListener('drop', async (event) => {
+    const tile = event.target.closest('[data-open-folder]');
+    if (!tile) return;
+    event.preventDefault();
+    tile.classList.remove('is-drop');
+    const folderId = Number(tile.dataset.openFolder);
+    const raw =
+      event.dataTransfer.getData('application/x-material-ids') ||
+      event.dataTransfer.getData('text/plain');
+    const ids = raw
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (!ids.length) return;
+    try {
+      await api.bulk({ action: 'move', ids, folder_id: folderId });
+      clearSelection();
+      await actions.reloadAll();
+      toast(ids.length > 1 ? `已移动 ${ids.length} 项` : '已移入分类');
+    } catch (error) {
+      toastError(error);
+    }
   });
 
   board.addEventListener('keydown', (event) => {
@@ -429,12 +473,13 @@ function menuForBackground(x, y) {
   }
 
   const inFolder = state.route.view === 'folder' ? state.route.folderId : null;
+  const moveIds = [...state.selection];
   const items = [
     {
       key: 'new-folder',
-      label: inFolder ? '新建子分类' : '新建分类',
+      label: moveIds.length ? '新建分类并移入' : inFolder ? '新建子分类' : '新建分类',
       icon: 'plus',
-      action: () => createFolder(inFolder, () => actions.reloadAll()),
+      action: () => createFolder(inFolder, () => actions.reloadAll(), { moveIds }),
     },
     { type: 'sep' },
     { key: 'upload-files', label: '上传文件', icon: 'upload', action: () => openFilePicker() },
@@ -520,6 +565,13 @@ export function openFileMenu(x, y, file) {
       label: '移动到分类',
       icon: 'move',
       action: () => moveFiles(ids, file.folder_id),
+    });
+    items.push({
+      key: 'new-folder-move',
+      label: '新建分类并移入',
+      icon: 'plus',
+      action: () =>
+        createFolder(file.folder_id, () => actions.reloadAll(), { moveIds: ids }),
     });
     items.push({
       key: 'rename',

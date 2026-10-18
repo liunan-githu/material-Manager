@@ -2,7 +2,7 @@
 
 import { api } from './api.js';
 import { state } from './state.js';
-import { escapeHtml, icon } from './util.js';
+import { escapeHtml, fmtBytes, icon, isVideoName } from './util.js';
 
 const modal = document.getElementById('dialogModal');
 const titleEl = document.getElementById('dialogTitle');
@@ -62,7 +62,6 @@ export function promptDialog({
   hint = '',
   confirmText = '确定',
 }) {
-  let result = null;
   return open({
     title,
     body: `
@@ -78,12 +77,10 @@ export function promptDialog({
     mount: ({ body: container, finish: done }) => {
       const input = container.querySelector('#dialogInput');
       const submit = () => {
-        const text = input.value.trim();
-        if (!text) {
+        if (!input.value.trim()) {
           input.focus();
           return;
         }
-        result = text;
         done('ok');
       };
       input.focus();
@@ -96,7 +93,13 @@ export function promptDialog({
       });
       container.querySelector('#dialogInput').addEventListener('dblclick', (event) => event.stopPropagation());
     },
-  }).then((action) => (action === 'ok' ? result : null));
+  }).then((action) => {
+    if (action !== 'ok') return null;
+    /* 回车和点「确定」都走这里取值，不能只依赖回车路径 */
+    const input = bodyEl.querySelector('#dialogInput');
+    const text = input ? input.value.trim() : '';
+    return text || null;
+  });
 }
 
 /* -------------------------------------------------------------------------
@@ -112,6 +115,14 @@ export function confirmDialog({ title, message, confirmText = '确定' }) {
       { label: confirmText, value: 'ok', kind: 'primary' },
     ],
   }).then((action) => action === 'ok');
+}
+
+export function alertDialog({ title, message, confirmText = '知道了' }) {
+  return open({
+    title,
+    body: `<p style="font-size:12.5px;line-height:1.8;color:var(--ink-2)">${escapeHtml(message)}</p>`,
+    actions: [{ label: confirmText, value: 'ok', kind: 'primary' }],
+  });
 }
 
 /* -------------------------------------------------------------------------
@@ -167,6 +178,88 @@ export function pickFolder({ title = '移动到', currentId = null, confirmText 
       });
     },
   }).then((action) => (action === 'ok' ? selectedId : null));
+}
+
+/* -------------------------------------------------------------------------
+   上传确认
+   ------------------------------------------------------------------------- */
+
+function keepExtension(name, original) {
+  const clean = String(name || '').trim();
+  if (!clean) return original;
+  if (/\.[A-Za-z0-9]{1,8}$/.test(clean)) return clean;
+  const dot = original.lastIndexOf('.');
+  return dot > 0 ? `${clean}${original.slice(dot)}` : clean;
+}
+
+export function confirmUploadDialog(files, defaultFolderId) {
+  const rows = flattenFolders(state.folders);
+  let selectedId = defaultFolderId ?? (rows[0] ? rows[0].id : null);
+  const names = files.map((file) => file.name);
+
+  const list = files
+    .map(
+      (file, index) => `<div class="upload-confirm-row">
+        ${icon(isVideoName(file.name) ? 'film' : 'file')}
+        <input class="input" data-name-index="${index}" value="${escapeHtml(file.name)}" spellcheck="false">
+        <span class="up-size">${fmtBytes(file.size)}</span>
+      </div>`
+    )
+    .join('');
+
+  return open({
+    title: '确认上传',
+    body: `
+      <div class="field">
+        <label>放进哪个分类</label>
+        <div class="picker picker--compact">
+          ${
+            rows.length
+              ? rows
+                  .map(
+                    (row) => `<button class="picker__row${row.id === selectedId ? ' is-active' : ''}"
+                      data-upload-folder="${row.id}" style="padding-left:${10 + row.depth * 18}px">
+                      ${icon(row.depth ? 'folder' : 'folder-open')}<span>${escapeHtml(row.name)}</span>
+                    </button>`
+                  )
+                  .join('')
+              : '<div class="field__hint" style="padding:8px 10px">还没有分类，先在左侧建一个。</div>'
+          }
+        </div>
+      </div>
+      <div class="field">
+        <label>文件名</label>
+        <div class="upload-confirm-list">${list}</div>
+        <div class="field__hint">可以在这里改名，扩展名会自动保留。</div>
+      </div>`,
+    actions: [
+      { label: '取消', value: 'cancel' },
+      { label: '开始上传', value: 'ok', kind: 'primary' },
+    ],
+    mount: ({ body: container }) => {
+      container.addEventListener('click', (event) => {
+        const row = event.target.closest('[data-upload-folder]');
+        if (!row) return;
+        container
+          .querySelectorAll('[data-upload-folder]')
+          .forEach((item) => item.classList.remove('is-active'));
+        row.classList.add('is-active');
+        selectedId = Number(row.dataset.uploadFolder);
+      });
+
+      container.querySelectorAll('[data-name-index]').forEach((input) => {
+        input.addEventListener('input', () => {
+          names[Number(input.dataset.nameIndex)] = input.value;
+        });
+      });
+    },
+  }).then((action) => {
+    if (action !== 'ok' || !selectedId) return null;
+    return {
+      folderId: selectedId,
+      names: files.map((file, index) => keepExtension(names[index], file.name)),
+    };
+  });
 }
 
 /* -------------------------------------------------------------------------

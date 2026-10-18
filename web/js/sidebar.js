@@ -1,9 +1,9 @@
 /** 左侧：分类树、标签、容量。 */
 
 import { api } from './api.js';
-import { confirmDialog, promptDialog } from './dialogs.js';
+import { alertDialog, confirmDialog, promptDialog } from './dialogs.js';
 import { openMenu } from './menu.js';
-import { emit, navigate, state, toggleCollapsed, isCollapsed } from './state.js';
+import { clearSelection, emit, navigate, state, toggleCollapsed, isCollapsed } from './state.js';
 import { toast, toastError } from './toast.js';
 import { escapeHtml, fmtBytes, fmtNumber, icon, kindLabel } from './util.js';
 
@@ -277,23 +277,35 @@ export function findFolder(id) {
   return walk(state.folders);
 }
 
-export async function createFolder(parentId, refresh) {
+export async function createFolder(parentId, refresh, options = {}) {
+  const moveIds = options.moveIds || [];
   const name = await promptDialog({
-    title: parentId ? '新建子分类' : '新建分类',
+    title: moveIds.length ? '新建分类并移入' : parentId ? '新建子分类' : '新建分类',
     label: '分类名称',
     placeholder: '比如 空镜、BGM、参考片',
-    hint: '会在素材库里同时创建一个同名文件夹。',
+    hint: moveIds.length
+      ? `创建后会把选中的 ${moveIds.length} 个素材直接移进去。`
+      : '会在素材库里同时创建一个同名文件夹。',
   });
-  if (!name) return;
+  if (!name) return null;
   try {
     const result = await api.createFolder({ name, parent_id: parentId || null });
     state.folders = result.folders;
     renderTree();
     markActive();
-    toast(`已创建「${name}」`);
+
+    if (moveIds.length) {
+      await api.bulk({ action: 'move', ids: moveIds, folder_id: result.id });
+      clearSelection();
+      toast(`已创建「${name}」并移入 ${moveIds.length} 个素材`);
+    } else {
+      toast(`已创建「${name}」`);
+    }
     if (refresh) refresh();
+    return result.id;
   } catch (error) {
     toastError(error);
+    return null;
   }
 }
 
@@ -318,9 +330,20 @@ export async function renameFolder(node, refresh) {
 }
 
 export async function deleteFolder(node, refresh) {
+  const files = node.total || 0;
+  const children = (node.children || []).length;
+
+  if (files || children) {
+    await alertDialog({
+      title: '这个分类还不能删',
+      message: `「${node.name}」里还有 ${files} 个素材、${children} 个子分类。先把素材拖到别的分类（或右键「移动到分类」），子分类清空后再删除这个分类。`,
+    });
+    return;
+  }
+
   const ok = await confirmDialog({
     title: '删除分类',
-    message: `「${node.name}」连同里面的 ${node.total || 0} 个素材会进入回收站，可以再还原。`,
+    message: `「${node.name}」是空分类，删除后目录会一起移除。`,
     confirmText: '删除分类',
   });
   if (!ok) return;
@@ -330,7 +353,7 @@ export async function deleteFolder(node, refresh) {
     if (state.route.view === 'folder' && state.route.folderId === node.id) navigate('#/all');
     renderTree();
     markActive();
-    toast('分类已删除，素材在回收站里');
+    toast('分类已删除');
     if (refresh) refresh();
   } catch (error) {
     toastError(error);

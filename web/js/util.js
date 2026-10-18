@@ -76,6 +76,13 @@ export const KIND_ICON = { video: 'film', audio: 'music', image: 'image', other:
 export const kindLabel = (kind) => KIND_LABEL[kind] || '文件';
 export const kindIcon = (kind) => KIND_ICON[kind] || 'file';
 
+const VIDEO_EXT =
+  /\.(mp4|m4v|mov|mkv|avi|wmv|flv|webm|mpg|mpeg|m2v|ts|mts|m2ts|3gp|ogv|rmvb|rm|asf|vob|f4v)$/i;
+
+export function isVideoName(name) {
+  return VIDEO_EXT.test(String(name || ''));
+}
+
 export function debounce(fn, wait = 200) {
   let timer = 0;
   const wrapped = (...args) => {

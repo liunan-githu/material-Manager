@@ -60,6 +60,15 @@ app = FastAPI(title="素材台", lifespan=lifespan)
 
 
 @app.middleware("http")
+async def static_no_cache(request: Request, call_next):
+    """前端文件每次都回源校验，改完代码普通刷新就能生效。"""
+    response = await call_next(request)
+    if request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.middleware("http")
 async def log_mutations(request: Request, call_next):
     """记录会改数据的请求，排查误操作时直接看 data/requests.log。"""
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and "/api/uploads/" not in request.url.path:
@@ -367,33 +376,28 @@ def delete_folder(folder_id: int) -> dict[str, Any]:
         if row is None:
             raise HTTPException(404, "目录不存在")
 
-        subtree: list[int] = []
-
-        def collect(node_id: int) -> None:
-            subtree.append(node_id)
-            for child in conn.execute("SELECT id FROM folders WHERE parent_id = ?", (node_id,)):
-                collect(child["id"])
-
-        collect(folder_id)
-        placeholders = ",".join("?" for _ in subtree)
+        # 非空分类先不给删：删掉会连带清掉文件记录，回收站里也找不回来
         files = conn.execute(
-            f"SELECT * FROM files WHERE folder_id IN ({placeholders}) AND deleted_at IS NULL",
-            subtree,
-        ).fetchall()
-        removed = 0
-        for file_row in files:
-            _trash_file(conn, file_row)
-            removed += 1
+            "SELECT COUNT(*) FROM files WHERE folder_id = ? AND deleted_at IS NULL", (folder_id,)
+        ).fetchone()[0]
+        children = conn.execute(
+            "SELECT COUNT(*) FROM folders WHERE parent_id = ?", (folder_id,)
+        ).fetchone()[0]
+        if files or children:
+            raise HTTPException(
+                409,
+                f"分类里还有 {files} 个素材、{children} 个子分类，先把它们移走再删除",
+            )
 
         root_path = db.folder_abs(conn, folder_id)
-        conn.execute(f"DELETE FROM folders WHERE id IN ({placeholders})", subtree)
+        conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
         if root_path.exists():
             shutil.rmtree(root_path, ignore_errors=True)
         folders = _folder_rows(conn)
         stats_payload = _stats(conn)
     jobs.bus.publish({"type": "folders"})
     jobs.bus.publish({"type": "stats", "stats": stats_payload})
-    return {"folders": folders, "trashed": removed}
+    return {"folders": folders, "trashed": 0}
 
 
 # --------------------------------------------------------------------------

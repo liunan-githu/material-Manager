@@ -787,6 +787,11 @@ img, svg { display: block; }
   box-shadow: 0 12px 28px -20px rgba(10, 80, 120, 0.55);
   transform: translateY(-1px);
 }
+.folder-tile.is-drop {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  box-shadow: 0 0 0 3px rgba(102, 204, 255, 0.2);
+}
 .folder-tile:active { transform: translateY(0); }
 .folder-tile__icon {
   width: 34px;
@@ -1345,6 +1350,25 @@ img, svg { display: block; }
 .picker__row .ico { width: 15px; height: 15px; color: #8aa4b6; }
 .picker__row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker__depth { padding-left: 0; }
+.picker--compact { max-height: 156px; }
+
+.upload-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.upload-confirm-row { display: flex; align-items: center; gap: 8px; }
+.upload-confirm-row > .ico { width: 15px; height: 15px; color: var(--ink-4); flex: none; }
+.upload-confirm-row .input { height: 34px; font-size: 12px; }
+.up-size {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
 
 .tag-check {
   width: 18px;
