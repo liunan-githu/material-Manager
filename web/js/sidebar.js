@@ -279,13 +279,22 @@ export function findFolder(id) {
 
 export async function createFolder(parentId, refresh, options = {}) {
   const moveIds = options.moveIds || [];
+  const parent = parentId ? findFolder(parentId) : null;
+  const parentName = parent ? parent.name : '';
+
   const name = await promptDialog({
-    title: moveIds.length ? '新建分类并移入' : parentId ? '新建子分类' : '新建分类',
+    title: moveIds.length
+      ? parentName
+        ? `在「${parentName}」里新建分类`
+        : '在顶级新建分类'
+      : parentName
+        ? `在「${parentName}」里新建子分类`
+        : '新建顶级分类',
     label: '分类名称',
     placeholder: '比如 空镜、BGM、参考片',
     hint: moveIds.length
-      ? `创建后会把选中的 ${moveIds.length} 个素材直接移进去。`
-      : '会在素材库里同时创建一个同名文件夹。',
+      ? `建好后把选中的 ${moveIds.length} 个素材直接移进去。`
+      : `会在素材库的${parentName ? `「${parentName}」` : '根目录'}下建一个同名文件夹。`,
   });
   if (!name) return null;
   try {

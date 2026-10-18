@@ -464,6 +464,18 @@ function bindInteractions() {
    右键菜单：空白处、文件夹方块、素材卡片
    ------------------------------------------------------------------------- */
 
+/* 新建分类的落点：优先当前分类，其次选中素材所在的分类 */
+function targetParentFor(ids) {
+  if (state.route.view === 'folder' && state.route.folderId) return state.route.folderId;
+  const files = state.items.filter((item) => ids.includes(item.id));
+  const folders = new Set(files.map((file) => file.folder_id));
+  if (folders.size === 1) {
+    const [folderId] = folders;
+    return folderId || null;
+  }
+  return null;
+}
+
 function menuForBackground(x, y) {
   if (state.route.view === 'trash') {
     openMenu(x, y, [
@@ -472,14 +484,17 @@ function menuForBackground(x, y) {
     return;
   }
 
-  const inFolder = state.route.view === 'folder' ? state.route.folderId : null;
   const moveIds = [...state.selection];
+  const parentId = targetParentFor(moveIds);
+  const parent = parentId ? findFolder(parentId) : null;
+  const where = parent ? `（${parent.name}）` : '（顶级）';
+
   const items = [
     {
       key: 'new-folder',
-      label: moveIds.length ? '新建分类并移入' : inFolder ? '新建子分类' : '新建分类',
+      label: moveIds.length ? `新建分类并移入${where}` : `新建分类${where}`,
       icon: 'plus',
-      action: () => createFolder(inFolder, () => actions.reloadAll(), { moveIds }),
+      action: () => createFolder(parentId, () => actions.reloadAll(), { moveIds }),
     },
     { type: 'sep' },
     { key: 'upload-files', label: '上传文件', icon: 'upload', action: () => openFilePicker() },
@@ -572,8 +587,7 @@ export function openFileMenu(x, y, file) {
       icon: 'plus',
       action: () =>
         createFolder(file.folder_id, () => actions.reloadAll(), { moveIds: ids }),
-    });
-    items.push({
+    });    items.push({
       key: 'rename',
       label: '重命名',
       icon: 'edit',
