@@ -1352,6 +1352,37 @@ img, svg { display: block; }
 .picker__depth { padding-left: 0; }
 .picker--compact { max-height: 156px; }
 
+.picker__branch {
+  position: relative;
+  width: 13px;
+  height: 15px;
+  flex: none;
+  margin-right: 1px;
+}
+.picker__row .picker__branch { flex: 0 0 13px; }
+.picker__branch::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -2px;
+  width: 9px;
+  height: 10px;
+  border-left: 1px solid #ccdae5;
+  border-bottom: 1px solid #ccdae5;
+  border-bottom-left-radius: 5px;
+}
+.picker__branch::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 5px;
+  width: 0;
+  height: 0;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-left: 4px solid #a9bccb;
+}
+
 .upload-confirm-list {
   display: flex;
   flex-direction: column;

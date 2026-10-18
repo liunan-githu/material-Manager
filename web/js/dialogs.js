@@ -129,12 +129,24 @@ export function alertDialog({ title, message, confirmText = '知道了' }) {
    目录选择
    ------------------------------------------------------------------------- */
 
-function flattenFolders(nodes, depth = 0, out = []) {
+function flattenFolders(nodes, depth = 0, out = [], trail = []) {
   nodes.forEach((node) => {
-    out.push({ ...node, depth });
-    if (node.children && node.children.length) flattenFolders(node.children, depth + 1, out);
+    const path = [...trail, node.name];
+    out.push({ ...node, depth, path });
+    if (node.children && node.children.length) {
+      flattenFolders(node.children, depth + 1, out, path);
+    }
   });
   return out;
+}
+
+/* 二级及以下分类前面的树形连接线 + 小箭头 */
+function folderBranch(depth) {
+  return depth ? '<span class="picker__branch" aria-hidden="true"></span>' : '';
+}
+
+function folderRowTitle(row) {
+  return escapeHtml((row.path || [row.name]).join(' / '));
 }
 
 export function pickFolder({ title = '移动到', currentId = null, confirmText = '移动到这里' } = {}) {
@@ -144,8 +156,8 @@ export function pickFolder({ title = '移动到', currentId = null, confirmText 
       ${rows
         .map(
           (row) => `<button class="picker__row${row.id === currentId ? ' is-active' : ''}" data-folder="${row.id}"
-            style="padding-left:${10 + row.depth * 18}px">
-            ${icon(row.depth ? 'folder' : 'folder-open')}<span>${escapeHtml(row.name)}</span>
+            style="padding-left:${10 + row.depth * 20}px" title="${folderRowTitle(row)}">
+            ${folderBranch(row.depth)}${icon(row.depth ? 'folder' : 'folder-open')}<span>${escapeHtml(row.name)}</span>
             <em style="font-style:normal;font-size:10.5px;color:var(--ink-4)">${row.total || 0}</em>
           </button>`
         )
@@ -218,8 +230,9 @@ export function confirmUploadDialog(files, defaultFolderId) {
               ? rows
                   .map(
                     (row) => `<button class="picker__row${row.id === selectedId ? ' is-active' : ''}"
-                      data-upload-folder="${row.id}" style="padding-left:${10 + row.depth * 18}px">
-                      ${icon(row.depth ? 'folder' : 'folder-open')}<span>${escapeHtml(row.name)}</span>
+                      data-upload-folder="${row.id}" style="padding-left:${10 + row.depth * 20}px"
+                      title="${folderRowTitle(row)}">
+                      ${folderBranch(row.depth)}${icon(row.depth ? 'folder' : 'folder-open')}<span>${escapeHtml(row.name)}</span>
                     </button>`
                   )
                   .join('')
